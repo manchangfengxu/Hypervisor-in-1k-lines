@@ -39,18 +39,25 @@ fn main() -> ! {
     init_bss();
     println!("\nBooting hypervisor...");
     allocator::GLOBAL_ALLOCATOR.init(&raw mut __heap, &raw mut __heap_end);
+    println!("Allocator initialized");
+    let mut hstatus: u64 = 0;
+    hstatus |= 2 << 32; // VSXL: XLEN for VS-mode (64-bit)
+    hstatus |= 1 << 7; // SPV: Supervisor Previous Virtualization mode
 
-    let mut v = alloc::vec::Vec::new();
-    v.push('a');
-    v.push('b');
-    v.push('c');
-    println!("v = {:?}", v);
-    // unsafe {
-    //     asm!("csrw stvec, {}", in(reg) trap::trap_handler as usize);
-    //     asm!("unimp"); // Illegal instruction here!
-    // }
-    // Infinite loop.
-    loop {}
+    let sepc: u64 = 0x1234abcd;
+    println!("hstatus: {}", hstatus);
+    println!("sepc: {}", sepc);
+    unsafe {
+        asm!(
+            "csrw hstatus, {hstatus}",
+            "csrw sepc, {sepc}",
+            "sret",
+            hstatus = in(reg) hstatus,
+            sepc = in(reg) sepc,
+        );
+    }
+    println!("check");
+    unreachable!();
 }
 
 use core::panic::PanicInfo;

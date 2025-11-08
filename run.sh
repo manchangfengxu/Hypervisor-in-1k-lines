@@ -8,7 +8,7 @@ cp target/riscv64gc-unknown-none-elf/debug/hypervisor hypervisor.elf
 
 qemu-system-riscv64 \
     -machine virt \
-    -cpu rv64 \
+    -cpu rv64,h=true \
     -bios default \
     -smp 1 \
     -m 128M \
