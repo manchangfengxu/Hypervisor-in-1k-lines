@@ -1,10 +1,11 @@
 #![no_std]
 #![no_main]
-
+mod allocator;
+mod trap;
 #[macro_use]
 mod print;
 use core::arch::asm;
-
+extern crate alloc;
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.boot")]
 pub extern "C" fn boot() -> ! {
@@ -18,10 +19,11 @@ pub extern "C" fn boot() -> ! {
     }
 }
 
-
 unsafe extern "C" {
     static mut __bss: u8;
     static mut __bss_end: u8;
+    static mut __heap: u8;
+    static mut __heap_end: u8;
 }
 
 fn init_bss() {
@@ -35,7 +37,18 @@ fn init_bss() {
 fn main() -> ! {
     // Fill the BSS section with zeros.
     init_bss();
-    println!("Hello, world!");
+    println!("\nBooting hypervisor...");
+    allocator::GLOBAL_ALLOCATOR.init(&raw mut __heap, &raw mut __heap_end);
+
+    let mut v = alloc::vec::Vec::new();
+    v.push('a');
+    v.push('b');
+    v.push('c');
+    println!("v = {:?}", v);
+    // unsafe {
+    //     asm!("csrw stvec, {}", in(reg) trap::trap_handler as usize);
+    //     asm!("unimp"); // Illegal instruction here!
+    // }
     // Infinite loop.
     loop {}
 }
@@ -44,6 +57,8 @@ use core::panic::PanicInfo;
 
 #[panic_handler]
 pub fn panic_handler(info: &PanicInfo) -> ! {
+    println!("PANIC HANDLER ENTERED!");
+    println!("PANIC: {}", info);
     loop {
         unsafe {
             core::arch::asm!("wfi"); // Wait for an interrupt (idle loop)

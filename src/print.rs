@@ -23,6 +23,7 @@ impl core::fmt::Write for Printer {
     }
 }
 
+#[macro_export]
 macro_rules! println {
     ($($arg:tt)*) => {{
         use core::fmt::Write;
