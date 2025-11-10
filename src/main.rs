@@ -1,11 +1,17 @@
 #![no_std]
 #![no_main]
 mod allocator;
+mod guest_page_table;
 mod trap;
 #[macro_use]
 mod print;
+use crate::{
+    allocator::alloc_pages,
+    guest_page_table::{GuestPageTable, PTEFlags},
+};
 use core::arch::asm;
 extern crate alloc;
+
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.boot")]
 pub extern "C" fn boot() -> ! {
@@ -35,28 +41,47 @@ fn init_bss() {
 }
 
 fn main() -> ! {
+    println!("\nBooting hypervisor...");
     // Fill the BSS section with zeros.
     init_bss();
-    println!("\nBooting hypervisor...");
+    unsafe {
+        // Set stvec with Direct mode (lower 2 bits = 00)
+        let stvec_addr = (trap::trap_handler as usize) & !0b11; // Clear lower 2 bits
+        asm!("csrw stvec, {}", in(reg) stvec_addr);
+        // asm!("unimp"); // Illegal instruction here!
+    }
+    // println!("\nBooting hypervisor...");
+
     allocator::GLOBAL_ALLOCATOR.init(&raw mut __heap, &raw mut __heap_end);
-    println!("Allocator initialized");
+
+    let kernel_image = include_bytes!("../guest.bin");
+    let guest_entry = 0x100000;
+
+    let kernel_memory = alloc_pages((kernel_image.len() + 4095) & !4095);
+    unsafe {
+        core::ptr::copy_nonoverlapping(kernel_image.as_ptr(), kernel_memory, kernel_image.len());
+    }
+    let mut table = GuestPageTable::new();
+    table.map(guest_entry, kernel_memory as u64, PTEFlags::RWX);
+
     let mut hstatus: u64 = 0;
     hstatus |= 2 << 32; // VSXL: XLEN for VS-mode (64-bit)
     hstatus |= 1 << 7; // SPV: Supervisor Previous Virtualization mode
 
-    let sepc: u64 = 0x1234abcd;
-    println!("hstatus: {}", hstatus);
-    println!("sepc: {}", sepc);
+    let sepc: u64 = guest_entry;
+
     unsafe {
         asm!(
             "csrw hstatus, {hstatus}",
+            "csrw hgatp, {hgatp}",
             "csrw sepc, {sepc}",
             "sret",
             hstatus = in(reg) hstatus,
+            hgatp = in(reg) table.hgatp(),
             sepc = in(reg) sepc,
         );
     }
-    println!("check");
+
     unreachable!();
 }
 
@@ -64,7 +89,6 @@ use core::panic::PanicInfo;
 
 #[panic_handler]
 pub fn panic_handler(info: &PanicInfo) -> ! {
-    println!("PANIC HANDLER ENTERED!");
     println!("PANIC: {}", info);
     loop {
         unsafe {

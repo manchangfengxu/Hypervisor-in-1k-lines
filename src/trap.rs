@@ -51,5 +51,8 @@ pub fn trap_handler() -> ! {
         _ => panic!("unknown scause: {:#x}", scause),
     };
 
-    panic!("trap handler: {} at {:#x} (stval={:#x})", scause_str, sepc, stval);
+    panic!(
+        "trap handler: {} at {:#x} (stval={:#x})",
+        scause_str, sepc, stval
+    );
 }

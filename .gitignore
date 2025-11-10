@@ -1,3 +1,5 @@
 /target
 *.elf
 *.log
+*.bin
+*.map
