@@ -3,11 +3,13 @@
 mod allocator;
 mod guest_page_table;
 mod trap;
+mod vcpu;
 #[macro_use]
 mod print;
 use crate::{
     allocator::alloc_pages,
     guest_page_table::{GuestPageTable, PTEFlags},
+    vcpu::VCpu,
 };
 use core::arch::asm;
 extern crate alloc;
@@ -64,25 +66,8 @@ fn main() -> ! {
     let mut table = GuestPageTable::new();
     table.map(guest_entry, kernel_memory as u64, PTEFlags::RWX);
 
-    let mut hstatus: u64 = 0;
-    hstatus |= 2 << 32; // VSXL: XLEN for VS-mode (64-bit)
-    hstatus |= 1 << 7; // SPV: Supervisor Previous Virtualization mode
-
-    let sepc: u64 = guest_entry;
-
-    unsafe {
-        asm!(
-            "csrw hstatus, {hstatus}",
-            "csrw hgatp, {hgatp}",
-            "csrw sepc, {sepc}",
-            "sret",
-            hstatus = in(reg) hstatus,
-            hgatp = in(reg) table.hgatp(),
-            sepc = in(reg) sepc,
-        );
-    }
-
-    unreachable!();
+    let mut vcpu = VCpu::new(&table, guest_entry);
+    vcpu.run();
 }
 
 use core::panic::PanicInfo;
