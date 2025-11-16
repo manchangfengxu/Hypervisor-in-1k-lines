@@ -3,3 +3,5 @@
 *.log
 *.bin
 *.map
+linux/Image
+linux/vmlinux

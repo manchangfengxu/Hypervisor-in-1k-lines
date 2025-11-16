@@ -43,7 +43,7 @@ unsafe impl GlobalAlloc for BumpAllocator {
 }
 
 pub fn alloc_pages(len: usize) -> *mut u8 {
-    debug_assert!(len % 4096 == 0, "len must be a multiple of 4096");
+    let len = len.next_multiple_of(4096);
     let layout = Layout::from_size_align(len, 0x1000).unwrap();
     unsafe { GLOBAL_ALLOCATOR.alloc_zeroed(layout) as *mut u8 }
 }

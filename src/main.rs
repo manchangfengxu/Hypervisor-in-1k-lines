@@ -4,12 +4,11 @@ mod allocator;
 mod guest_page_table;
 mod trap;
 mod vcpu;
+mod linux_loader;
 #[macro_use]
 mod print;
 use crate::{
-    allocator::alloc_pages,
-    guest_page_table::{GuestPageTable, PTEFlags},
-    vcpu::VCpu,
+    allocator::alloc_pages, guest_page_table::{GuestPageTable, PTEFlags}, linux_loader::GUEST_BASE_ADDR, vcpu::VCpu, linux_loader::GUEST_DTB_ADDR
 };
 use core::arch::asm;
 extern crate alloc;
@@ -56,17 +55,20 @@ fn main() -> ! {
 
     allocator::GLOBAL_ALLOCATOR.init(&raw mut __heap, &raw mut __heap_end);
 
-    let kernel_image = include_bytes!("../guest.bin");
-    let guest_entry = 0x100000;
+    // let kernel_image = include_bytes!("../guest.bin");
+    // let guest_entry = 0x100000;
 
-    let kernel_memory = alloc_pages((kernel_image.len() + 4095) & !4095);
-    unsafe {
-        core::ptr::copy_nonoverlapping(kernel_image.as_ptr(), kernel_memory, kernel_image.len());
-    }
+    // let kernel_memory = alloc_pages((kernel_image.len() + 4095) & !4095);
+    // unsafe {
+    //     core::ptr::copy_nonoverlapping(kernel_image.as_ptr(), kernel_memory, kernel_image.len());
+    // }
     let mut table = GuestPageTable::new();
-    table.map(guest_entry, kernel_memory as u64, PTEFlags::RWX);
-
-    let mut vcpu = VCpu::new(&table, guest_entry);
+    let kernel_image = include_bytes!("../linux/Image");
+    linux_loader::load_linux_kernel(&mut table, kernel_image);
+    let mut vcpu = VCpu::new(&table, GUEST_BASE_ADDR);
+    vcpu.a0 = 0; // hart ID
+    vcpu.a1 = GUEST_DTB_ADDR; // device tree address)
+    println!("start vcpu run");
     vcpu.run();
 }
 

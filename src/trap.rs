@@ -1,3 +1,5 @@
+use alloc::format;
+
 use crate::println;
 use crate::vcpu::VCpu;
 use core::{arch::global_asm, mem::offset_of};
@@ -113,16 +115,13 @@ extern "C" fn handle_trap(vcpu: *mut VCpu) -> ! {
 
     let scause_str = match scause {
         10 => "Environment call from VS-mode",
-        _ => "unknown trap",
+        _ => &format!("{}", scause),
     };
 
     if scause == 10 {
         println!(
             "SBI call: eid={:#x}, fid={:#x}, a0={:#x} ('{}')",
-            vcpu.a7,
-            vcpu.a6,
-            vcpu.a0,
-            vcpu.a0 as u8 as char,
+            vcpu.a7, vcpu.a6, vcpu.a0, vcpu.a0 as u8 as char,
         );
         // Resume the guest after the ECALL instruction.
         vcpu.sepc = sepc + 4;

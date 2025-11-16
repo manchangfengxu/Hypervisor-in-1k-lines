@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 bitflags = "2.10.0"
 spin = "0.10.0"
+vm-fdt = { version = "0.3.0", features = ["alloc"], default-features = false }

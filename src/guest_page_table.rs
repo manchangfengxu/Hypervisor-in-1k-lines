@@ -106,7 +106,7 @@ impl GuestPageTable {
 
         // Map the final entry at level 0
         let entry = table.entry_by_addr(guest_paddr, 0);
-        crate::println!("map: {:#010x} -> {:#010x}", guest_paddr, host_paddr);
+        // crate::println!("map: {:#010x} -> {:#010x}", guest_paddr, host_paddr);
         assert!(!entry.is_valid(), "already mapped");
         *entry = Entry::new(host_paddr, flags | PTEFlags::V | PTEFlags::U);
     }

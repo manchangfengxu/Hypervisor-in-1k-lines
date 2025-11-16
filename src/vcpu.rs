@@ -1,6 +1,6 @@
+use crate::{allocator::alloc_pages, guest_page_table::GuestPageTable};
 use core::arch::asm;
 use core::mem::offset_of;
-use crate::{allocator::alloc_pages, guest_page_table::GuestPageTable};
 
 #[repr(C)]
 #[derive(Debug, Default)]
@@ -41,6 +41,7 @@ pub struct VCpu {
     pub t4: u64,
     pub t5: u64,
     pub t6: u64,
+    pub hedeleg: u64,
 }
 
 impl VCpu {
@@ -53,12 +54,27 @@ impl VCpu {
 
         let stack_size = 512 * 1024;
         let host_sp = alloc_pages(stack_size) as u64 + stack_size as u64;
+
+        let mut hedeleg: u64 = 0;
+        hedeleg |= 1 << 0; // Instruction address misaligned
+        hedeleg |= 1 << 1; // Instruction access fault
+        hedeleg |= 1 << 2; // Illegal instruction
+        hedeleg |= 1 << 3; // Breakpoint
+        hedeleg |= 1 << 4; // Load address misaligned
+        hedeleg |= 1 << 5; // Load access fault
+        hedeleg |= 1 << 6; // Store/AMO address misaligned
+        hedeleg |= 1 << 7; // Store/AMO access fault
+        hedeleg |= 1 << 8; // Environment call from U-mode
+        hedeleg |= 1 << 12; // Instruction page fault
+        hedeleg |= 1 << 13; // Load page fault
+        hedeleg |= 1 << 15; // Store/AMO page fault
         Self {
             hstatus,
             hgatp: table.hgatp(),
             sstatus,
             sepc: guest_entry,
             host_sp,
+            hedeleg,
             ..Default::default()
         }
     }
@@ -71,6 +87,7 @@ impl VCpu {
                 "csrw sscratch, {sscratch}",
                 "csrw hgatp, {hgatp}",
                 "csrw sepc, {sepc}",
+                "csrw hedeleg, {hedeleg}",
                  // Restore general-purpose registers.
                 "mv a0, {sscratch}",
                 "ld ra, {ra_offset}(a0)",
@@ -109,6 +126,7 @@ impl VCpu {
                 sstatus = in(reg) self.sstatus,
                 hgatp = in(reg) self.hgatp,
                 sepc = in(reg) self.sepc,
+                hedeleg = in(reg) self.hedeleg,
                 sscratch = in(reg) (self as *mut VCpu as usize),
                                 ra_offset = const offset_of!(VCpu, ra),
                 sp_offset = const offset_of!(VCpu, sp),
