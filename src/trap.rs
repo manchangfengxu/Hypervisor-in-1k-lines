@@ -4,6 +4,10 @@ use crate::println;
 use crate::vcpu::VCpu;
 use core::{arch::global_asm, mem::offset_of};
 
+unsafe extern "C" {
+    pub fn trap_handler() -> !;
+}
+
 macro_rules! read_csr {
     ($csr:expr) => {{
         let mut value: u64;
@@ -12,6 +16,60 @@ macro_rules! read_csr {
         }
         value
     }};
+}
+
+extern "C" fn handle_trap(vcpu: *mut VCpu) -> ! {
+    let vcpu = unsafe { &mut *vcpu };
+
+    let scause = read_csr!("scause");
+    let sepc = read_csr!("sepc");
+    let stval = read_csr!("stval");
+
+    let scause_str = match scause {
+        10 => "Environment call from VS-mode",
+        _ => &format!("{}", scause),
+    };
+
+    match scause {
+        10 => {
+            handle_sbi_call(vcpu);
+            vcpu.sepc += 4;
+        }
+        _ => {
+            panic!("trap handler: {} at {:#x} (stval={:#x})", scause_str, sepc, stval);
+        }
+    }
+
+    vcpu.run();
+}
+
+
+fn handle_sbi_call(vcpu: &mut VCpu) {
+    let eid = vcpu.a7;
+    let fid = vcpu.a6;
+    let result: Result<i64, i64> = match (eid, fid) {
+        // Get SBI specification version
+        (0x10, 0x0) => Ok(0),
+        // Console Putchar.
+        (0x1, 0x0) => {
+            let ch = vcpu.a0 as u8;
+            println!("[guest] {}", ch as char);
+            Ok(0)
+        }
+        _ => {
+            panic!("unimplemented SBI call: eid={:#x}, fid={:#x}", eid, fid);
+        }
+    };
+
+    match result {
+        Ok(value) => {
+            vcpu.a0 = 0;
+            vcpu.a1 = value as u64;
+        }
+        Err(err) => {
+            vcpu.a0 = err as u64;
+        }
+    }
 }
 
 global_asm!(
@@ -101,36 +159,3 @@ trap_handler:
     t5_offset = const offset_of!(VCpu, t5),
     t6_offset = const offset_of!(VCpu, t6),
 );
-
-unsafe extern "C" {
-    pub fn trap_handler() -> !;
-}
-
-extern "C" fn handle_trap(vcpu: *mut VCpu) -> ! {
-    let vcpu = unsafe { &mut *vcpu };
-
-    let scause = read_csr!("scause");
-    let sepc = read_csr!("sepc");
-    let stval = read_csr!("stval");
-
-    let scause_str = match scause {
-        10 => "Environment call from VS-mode",
-        _ => &format!("{}", scause),
-    };
-
-    if scause == 10 {
-        println!(
-            "SBI call: eid={:#x}, fid={:#x}, a0={:#x} ('{}')",
-            vcpu.a7, vcpu.a6, vcpu.a0, vcpu.a0 as u8 as char,
-        );
-        // Resume the guest after the ECALL instruction.
-        vcpu.sepc = sepc + 4;
-    } else {
-        panic!(
-            "trap handler: {} at {:#x} (stval={:#x})",
-            scause_str, sepc, stval,
-        );
-    }
-
-    vcpu.run();
-}
