@@ -88,6 +88,7 @@ impl VCpu {
                 "csrw hgatp, {hgatp}",
                 "csrw sepc, {sepc}",
                 "csrw hedeleg, {hedeleg}",
+                "csrw hcounteren, {hcounteren}",
                  // Restore general-purpose registers.
                 "mv a0, {sscratch}",
                 "ld ra, {ra_offset}(a0)",
@@ -127,6 +128,7 @@ impl VCpu {
                 hgatp = in(reg) self.hgatp,
                 sepc = in(reg) self.sepc,
                 hedeleg = in(reg) self.hedeleg,
+                hcounteren = in(reg) 0b11, /* cycle and time */
                 sscratch = in(reg) (self as *mut VCpu as usize),
                                 ra_offset = const offset_of!(VCpu, ra),
                 sp_offset = const offset_of!(VCpu, sp),

@@ -2,13 +2,17 @@
 #![no_main]
 mod allocator;
 mod guest_page_table;
+mod linux_loader;
 mod trap;
 mod vcpu;
-mod linux_loader;
 #[macro_use]
 mod print;
 use crate::{
-    allocator::alloc_pages, guest_page_table::{GuestPageTable, PTEFlags}, linux_loader::GUEST_BASE_ADDR, vcpu::VCpu, linux_loader::GUEST_DTB_ADDR
+    allocator::alloc_pages,
+    guest_page_table::{GuestPageTable, PTEFlags},
+    linux_loader::GUEST_BASE_ADDR,
+    linux_loader::GUEST_DTB_ADDR,
+    vcpu::VCpu,
 };
 use core::arch::asm;
 extern crate alloc;

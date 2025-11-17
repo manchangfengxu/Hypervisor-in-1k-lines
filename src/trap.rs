@@ -2,12 +2,9 @@ use alloc::format;
 
 use crate::println;
 use crate::vcpu::VCpu;
+use alloc::vec::Vec;
 use core::{arch::global_asm, mem::offset_of};
-
-unsafe extern "C" {
-    pub fn trap_handler() -> !;
-}
-
+use spin::Mutex;
 macro_rules! read_csr {
     ($csr:expr) => {{
         let mut value: u64;
@@ -18,46 +15,96 @@ macro_rules! read_csr {
     }};
 }
 
-extern "C" fn handle_trap(vcpu: *mut VCpu) -> ! {
-    let vcpu = unsafe { &mut *vcpu };
+unsafe extern "C" {
+    pub fn trap_handler() -> !;
+}
 
+extern "C" fn handle_trap(vcpu: *mut VCpu) -> ! {
     let scause = read_csr!("scause");
     let sepc = read_csr!("sepc");
     let stval = read_csr!("stval");
-
     let scause_str = match scause {
-        10 => "Environment call from VS-mode",
-        _ => &format!("{}", scause),
+        0 => "instruction address misaligned",
+        1 => "instruction access fault",
+        2 => "illegal instruction",
+        3 => "breakpoint",
+        4 => "load address misaligned",
+        5 => "load access fault",
+        6 => "store/AMO address misaligned",
+        7 => "store/AMO access fault",
+        8 => "environment call from U/VU-mode",
+        9 => "environment call from HS-mode",
+        10 => "environment call from VS-mode",
+        11 => "environment call from M-mode",
+        12 => "instruction page fault",
+        13 => "load page fault",
+        15 => "store/AMO page fault",
+        20 => "instruction guest-page fault",
+        21 => "load guest-page fault",
+        22 => "virtual instruction",
+        23 => "store/AMO guest-page fault",
+        0x8000_0000_0000_0000 => "user software interrupt",
+        0x8000_0000_0000_0001 => "supervisor software interrupt",
+        0x8000_0000_0000_0002 => "hypervisor software interrupt",
+        0x8000_0000_0000_0003 => "machine software interrupt",
+        0x8000_0000_0000_0004 => "user timer interrupt",
+        0x8000_0000_0000_0005 => "supervisor timer interrupt",
+        0x8000_0000_0000_0006 => "hypervisor timer interrupt",
+        0x8000_0000_0000_0007 => "machine timer interrupt",
+        0x8000_0000_0000_0008 => "user external interrupt",
+        0x8000_0000_0000_0009 => "supervisor external interrupt",
+        0x8000_0000_0000_000a => "hypervisor external interrupt",
+        0x8000_0000_0000_000b => "machine external interrupt",
+        _ => panic!("unknown scause: {:#x}", scause),
     };
 
+    let vcpu = unsafe { &mut *vcpu };
     match scause {
-        10 => {
+        10 /* environment call from VS-mode */ => {
             handle_sbi_call(vcpu);
-            vcpu.sepc += 4;
+            vcpu.sepc = sepc + 4;
         }
-        _ => {
-            panic!("trap handler: {} at {:#x} (stval={:#x})", scause_str, sepc, stval);
-        }
+
+        _ => panic!("trap handler: {} at {:#x} (stval={:#x})", scause_str, sepc, stval),
     }
 
     vcpu.run();
 }
 
+static CONSOLE_BUFFER: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
 fn handle_sbi_call(vcpu: &mut VCpu) {
     let eid = vcpu.a7;
     let fid = vcpu.a6;
     let result: Result<i64, i64> = match (eid, fid) {
+        // Set Timer
+        (0x00, 0x0) => {
+            println!("[sbi] WARN: set_timer is not implemented, ignoring");
+            Ok(0)
+        }
         // Get SBI specification version
         (0x10, 0x0) => Ok(0),
+        // Probe SBI extension
+        (0x10, 0x3) => Err(-1),
+        // Get machine vendor/arch/implementation ID
+        (0x10, 0x4 | 0x5 | 0x6) => Ok(0),
         // Console Putchar.
         (0x1, 0x0) => {
             let ch = vcpu.a0 as u8;
-            println!("[guest] {}", ch as char);
+            let mut buffer = CONSOLE_BUFFER.lock();
+            if ch == b'\n' {
+                let output = core::str::from_utf8(&buffer).unwrap_or("(not utf-8)");
+                println!("[guest] {}", output);
+                buffer.clear();
+            } else {
+                buffer.push(ch);
+            }
             Ok(0)
         }
+        // Console Getchar.
+        (0x2, 0x0) => Err(-1), // Not supported
         _ => {
-            panic!("unimplemented SBI call: eid={:#x}, fid={:#x}", eid, fid);
+            panic!("unknown SBI call: eid={:#x}, fid={:#x}", eid, fid);
         }
     };
 
