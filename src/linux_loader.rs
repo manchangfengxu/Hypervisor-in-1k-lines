@@ -20,29 +20,10 @@ struct RiscvImageHeader {
     reserved3: u32,
 }
 
-pub const GUEST_BASE_ADDR: u64 = 0x80200000;
+pub const GUEST_BASE_ADDR: u64 = 0x80000000;
 pub const MEMORY_SIZE: usize = 64 * 1024 * 1024;
 pub const GUEST_DTB_ADDR: u64 = 0x7000_0000;
 
-fn copy_and_map(
-    table: &mut GuestPageTable,
-    data: &[u8],
-    guest_addr: u64,
-    len: usize,
-    flags: PTEFlags,
-) {
-    // Allocate a memory region, and copy the data to it.
-    assert!(data.len() <= len, "data is beyond the region");
-    let raw_ptr = alloc_pages(len);
-    unsafe {
-        core::ptr::copy_nonoverlapping(data.as_ptr(), raw_ptr, data.len());
-    }
-    // Map the memory region to the guest's address space.
-    let host_ptr = raw_ptr as u64;
-    for off in (0..len).step_by(4096) {
-        table.map(guest_addr + off as u64, host_ptr + off as u64, flags);
-    }
-}
 
 pub fn load_linux_kernel(table: &mut GuestPageTable, image: &[u8]) {
     assert!(image.len() >= size_of::<RiscvImageHeader>());
@@ -62,6 +43,27 @@ pub fn load_linux_kernel(table: &mut GuestPageTable, image: &[u8]) {
     assert!(dtb.len() <= 0x10000, "DTB is too large");
     copy_and_map(table, &dtb, GUEST_DTB_ADDR, dtb.len(), PTEFlags::R);
     println!("loaded kernel: size={}KB", kernel_size / 1024);
+}
+
+
+fn copy_and_map(
+    table: &mut GuestPageTable,
+    data: &[u8],
+    guest_addr: u64,
+    len: usize,
+    flags: PTEFlags,
+) {
+    // Allocate a memory region, and copy the data to it.
+    assert!(data.len() <= len, "data is beyond the region");
+    let raw_ptr = alloc_pages(len);
+    unsafe {
+        core::ptr::copy_nonoverlapping(data.as_ptr(), raw_ptr, data.len());
+    }
+    // Map the memory region to the guest's address space.
+    let host_ptr = raw_ptr as u64;
+    for off in (0..len).step_by(4096) {
+        table.map(guest_addr + off as u64, host_ptr + off as u64, flags);
+    }
 }
 
 fn build_device_tree() -> Result<Vec<u8>, vm_fdt::Error> {
@@ -98,3 +100,4 @@ fn build_device_tree() -> Result<Vec<u8>, vm_fdt::Error> {
     fdt.end_node(root_node)?;
     fdt.finish()
 }
+
