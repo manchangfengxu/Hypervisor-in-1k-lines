@@ -53,19 +53,10 @@ fn main() -> ! {
         // Set stvec with Direct mode (lower 2 bits = 00)
         let stvec_addr = (trap::trap_handler as usize) & !0b11; // Clear lower 2 bits
         asm!("csrw stvec, {}", in(reg) stvec_addr);
-        // asm!("unimp"); // Illegal instruction here!
     }
-    // println!("\nBooting hypervisor...");
 
     allocator::GLOBAL_ALLOCATOR.init(&raw mut __heap, &raw mut __heap_end);
 
-    // let kernel_image = include_bytes!("../guest.bin");
-    // let guest_entry = 0x100000;
-
-    // let kernel_memory = alloc_pages((kernel_image.len() + 4095) & !4095);
-    // unsafe {
-    //     core::ptr::copy_nonoverlapping(kernel_image.as_ptr(), kernel_memory, kernel_image.len());
-    // }
     let mut table = GuestPageTable::new();
     let kernel_image = include_bytes!("../linux/Image");
     linux_loader::load_linux_kernel(&mut table, kernel_image);
