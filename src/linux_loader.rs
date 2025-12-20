@@ -26,15 +26,11 @@ pub const GUEST_DTB_ADDR: u64 = 0x7000_0000;
 pub const PLIC_ADDR: u64 = 0x0c00_0000;
 pub const PLIC_END: u64 = PLIC_ADDR + 0x400000;
 
+// Map the kernel and the dtb to the host physical address.
 pub fn load_linux_kernel(table: &mut GuestPageTable, image: &[u8]) {
     assert!(image.len() >= size_of::<RiscvImageHeader>());
     let header = unsafe { &*(image.as_ptr() as *const RiscvImageHeader) };
     assert_eq!(u32::from_le(header.magic2), 0x05435352, "invalid magic");
-    println!("text_offset = {:#x}", u64::from_le(header.text_offset));
-    // println!(
-    //     "entry = {:#x}",
-    //     GUEST_BASE_ADDR + u64::from_le(header.text_offset)
-    // );
     let kernel_size = u64::from_le(header.image_size);
     assert!(image.len() <= MEMORY_SIZE);
 
